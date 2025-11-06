@@ -3,15 +3,12 @@ FROM oven/bun:1 AS builder
 
 WORKDIR /app
 
-# Copy package files
-COPY package.json ./
+# Copy the ENTIRE project first (needed for local dependencies)
+COPY . .
 
 # Install dependencies with memory optimization
 ENV NODE_OPTIONS="--max-old-space-size=4096"
 RUN bun install --production
-
-# Copy source code
-COPY . .
 
 # Build the project
 RUN bun run build

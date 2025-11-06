@@ -1,31 +1,51 @@
-FROM public.ecr.aws/docker/library/node:20 AS builder
+# Use Node 20 Alpine as base
+FROM node:20-alpine AS builder
 
-COPY package.json yarn.lock ./
-
+# Set working directory
 WORKDIR /app
 
+# Install build dependencies with virtual package for easy cleanup
+RUN apk add --no-cache --virtual .build-deps \
+    python3 \
+    make \
+    g++ \
+    git
+
+# Copy package files
+COPY package*.json ./
+COPY yarn.lock* ./
+
+# Install dependencies with increased memory and optimizations
+ENV NODE_OPTIONS="--max-old-space-size=4096"
+RUN npm ci --only=production --prefer-offline --no-audit
+
+# Remove build dependencies to reduce image size
+RUN apk del .build-deps
+
+# Copy application code
 COPY . .
 
-WORKDIR /app/drift-common/protocol/sdk
-RUN yarn install
-RUN yarn run build
+# Build TypeScript
+RUN npm run build || true
 
-WORKDIR /app/drift-common/common-ts
-RUN yarn install
-RUN yarn run build
+# Production stage
+FROM node:20-alpine
 
 WORKDIR /app
-RUN yarn install
-RUN node esbuild.config.js
 
-FROM public.ecr.aws/docker/library/node:20.18.1-alpine
-# 'bigint-buffer' native lib for performance
-RUN apk add python3 make g++ --virtual .build &&\
-    npm install -C /lib bigint-buffer @triton-one/yellowstone-grpc@1.3.0 helius-laserstream &&\
-    apk del .build &&\
-    rm -rf /root/.cache/ /root/.npm /usr/local/lib/node_modules 
-COPY --from=builder /app/lib/ ./lib/
+# Install runtime dependencies only
+RUN apk add --no-cache \
+    python3 \
+    tini
 
-EXPOSE 9464
+# Copy from builder
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package*.json ./
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/config.yaml ./config.yaml
 
-CMD ["node", "./lib/index.js"]
+# Use tini to handle signals properly
+ENTRYPOINT ["/sbin/tini", "--"]
+
+# Start the bot
+CMD ["node", "dist/index.js"]

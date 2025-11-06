@@ -6,9 +6,9 @@ WORKDIR /app
 # Copy the entire project (needed for local dependencies)
 COPY . .
 
-# Install dependencies with memory optimization
+# Install dependencies with memory optimization (no lockfile flags)
 ENV NODE_OPTIONS="--max-old-space-size=4096"
-RUN bun install --production --no-frozen-lockfile
+RUN bun install --production
 
 # Build the project
 RUN bun run build

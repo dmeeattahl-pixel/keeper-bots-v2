@@ -3,12 +3,12 @@ FROM oven/bun:1 AS builder
 
 WORKDIR /app
 
-# Copy the ENTIRE project first (needed for local dependencies)
+# Copy the entire project (needed for local dependencies)
 COPY . .
 
 # Install dependencies with memory optimization
 ENV NODE_OPTIONS="--max-old-space-size=4096"
-RUN bun install --production
+RUN bun install --production --no-frozen-lockfile
 
 # Build the project
 RUN bun run build

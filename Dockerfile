@@ -1,51 +1,39 @@
-# Use Node 20 Alpine as base
-FROM node:20-alpine AS builder
+# Use Bun image
+FROM oven/bun:1 AS builder
 
-# Set working directory
 WORKDIR /app
-
-# Install build dependencies with virtual package for easy cleanup
-RUN apk add --no-cache --virtual .build-deps \
-    python3 \
-    make \
-    g++ \
-    git
 
 # Copy package files
-COPY package*.json ./
-COPY yarn.lock* ./
+COPY package.json bun.lockb ./
 
-# Install dependencies with increased memory and optimizations
+# Install dependencies with memory optimization
 ENV NODE_OPTIONS="--max-old-space-size=4096"
-RUN npm ci --only=production --prefer-offline --no-audit
+RUN bun install --frozen-lockfile --production
 
-# Remove build dependencies to reduce image size
-RUN apk del .build-deps
-
-# Copy application code
+# Copy source code
 COPY . .
 
-# Build TypeScript
-RUN npm run build || true
+# Build the project
+RUN bun run build
 
 # Production stage
-FROM node:20-alpine
+FROM oven/bun:1-alpine
 
 WORKDIR /app
 
-# Install runtime dependencies only
-RUN apk add --no-cache \
-    python3 \
-    tini
+# Install tini for proper signal handling
+RUN apk add --no-cache tini
 
-# Copy from builder
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/package*.json ./
+# Copy built files and dependencies
 COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/config.yaml ./config.yaml
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package.json ./
 
-# Use tini to handle signals properly
+# Set memory limits
+ENV NODE_OPTIONS="--max-old-space-size=512"
+
+# Use tini as entrypoint
 ENTRYPOINT ["/sbin/tini", "--"]
 
 # Start the bot
-CMD ["node", "dist/index.js"]
+CMD ["bun", "run", "dist/index.js"]
